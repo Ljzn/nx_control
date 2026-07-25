@@ -232,7 +232,7 @@ defmodule NxControl.TransferFunction do
     result = Nx.as_type(coefs[0], {:c, 128})
 
     result =
-      for i <- 1..n, reduce: result do
+      for i <- 1..n//1, reduce: result do
         acc -> Nx.add(Nx.multiply(acc, s), Nx.as_type(coefs[i], {:c, 128}))
       end
 
