@@ -1,6 +1,36 @@
 defmodule NxControl.TransferFunction do
   @moduledoc """
-  Transfer function representation G(s) = num(s) / den(s).
+  Transfer function representation `G(s) = num(s) / den(s)`.
+
+  A transfer function models a linear time-invariant (LTI) system as the
+  ratio of two polynomials in the Laplace variable `s`:
+
+      G(s) = b₀·sᵐ + b₁·sᵐ⁻¹ + ... + bₘ
+             ─────────────────────────────
+             a₀·sⁿ + a₁·sⁿ⁻¹ + ... + aₙ
+
+  Numerator and denominator coefficients are stored as `Nx.Tensor` vectors
+  in descending power order.
+
+  ## Stability analysis
+
+  NxControl provides two complementary methods:
+
+    * **Routh-Hurwitz** (`stable?/1`) — examines the characteristic
+      polynomial coefficients to determine stability without computing
+      roots. Fast and numerically robust.
+
+    * **Pole-based** (`pole_stable?/1`) — computes all poles via the
+      DKA (Durand-Kerner-Aberth) polynomial root finder and checks
+      that all real parts are negative.
+
+  ## Examples
+
+      iex> tf = NxControl.TransferFunction.new([1], [1, 3, 2])
+      iex> NxControl.TransferFunction.stable?(tf)
+      true
+      iex> NxControl.TransferFunction.poles(tf)
+      #Nx.Tensor<c128[2] [-1.0+0.0i, -2.0+0.0i]>
   """
 
   defstruct [:num, :den]
