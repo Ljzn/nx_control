@@ -54,7 +54,7 @@ defmodule NxControl.FrequencyResp do
       end)
 
     {
-      Nx.tensor(Enum.reverse(freqs), type: :f64),
+      Nx.tensor(freqs, type: :f64),
       Nx.tensor(Enum.reverse(mag), type: :f64),
       Nx.tensor(Enum.reverse(phase), type: :f64)
     }
