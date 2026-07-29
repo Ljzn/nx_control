@@ -10,6 +10,8 @@ Mix.install([
   {:vega_lite, "~> 0.1"},
   {:kino_vega_lite, "~> 0.1"}
 ])
+
+alias VegaLite, as: Vl
 ```
 
 ## 系统定义
@@ -66,7 +68,75 @@ Vl.new(width: 600, height: 300, title: "Bode Plot — Phase")
 {gm_mag, gm_phase, pm_freq, pm_phase} = NxControl.FrequencyResp.margins(tf)
 ```
 
-| 裕度 | 值 |
-|------|-----|
-| Gain Margin | #{if gm_mag == :infinity, do: "∞", else: Float.round(gm_mag, 4)} |
+| 裕度       | 值                                                                                                                                             |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gain Margin  | #{if gm_mag == :infinity, do: "∞", else: Float.round(gm_mag, 4)}                                                                              |
 | Phase Margin | #{if pm_phase == nil, do: "—", else: Float.round(pm_phase, 2)}° at #{if pm_freq == nil, do: "—", else: "#{Float.round(pm_freq, 3)} rad/s"} |
+
+---
+
+## MATLAB 时间常数形式示例
+
+MATLAB 中以 `(Ts + 1)` 格式定义的传递函数：
+
+```matlab
+f0 = [0.82 1];
+f1 = [0.337 1];
+f2 = [1.64 1];
+f3 = [0.07 1];
+den1 = conv(f0, f1)
+den2 = conv(f2, f3)
+sys = tf(den1, den2)
+bode(sys)
+```
+
+在 nx_control 中等价于：
+
+```elixir
+# 多项式乘法（conv）
+f0 = [0.82, 1.0]; f1 = [0.337, 1.0]
+f2 = [1.64, 1.0]; f3 = [0.07, 1.0]
+
+poly_mul = fn a, b ->
+  len = length(a) + length(b) - 1
+  for i <- 0..(len - 1) do
+    Enum.reduce(0..i, 0.0, fn j, acc ->
+      (Enum.at(a, i - j) || 0.0) * (Enum.at(b, j) || 0.0) + acc
+    end)
+  end
+end
+
+num = poly_mul.(f0, f1)  # 0.27634s² + 1.157s + 1.0
+den = poly_mul.(f2, f3)  # 0.1148s² + 1.71s + 1.0
+
+tf_m = NxControl.TransferFunction.new(num, den)
+{freqs_m, mag_m, phase_m} = NxControl.FrequencyResp.bode_data(tf_m)
+```
+
+### Bode 图
+
+```elixir
+data_m = %{
+  log_freq: Nx.to_flat_list(freqs_m) |> Enum.map(&:math.log10/1),
+  magnitude: Nx.to_flat_list(mag_m)
+}
+
+Vl.new(width: 600, height: 300, title: "MATLAB 传递函数 — 幅频")
+|> Vl.data_from_values(data_m)
+|> Vl.mark(:line, color: "green")
+|> Vl.encode_field(:x, "log_freq", type: :quantitative, title: "log₁₀(ω)")
+|> Vl.encode_field(:y, "magnitude", type: :quantitative, title: "Magnitude (dB)")
+```
+
+```elixir
+data_m2 = %{
+  log_freq: Nx.to_flat_list(freqs_m) |> Enum.map(&:math.log10/1),
+  phase: Nx.to_flat_list(phase_m)
+}
+
+Vl.new(width: 600, height: 300, title: "MATLAB 传递函数 — 相频")
+|> Vl.data_from_values(data_m2)
+|> Vl.mark(:line, color: "green")
+|> Vl.encode_field(:x, "log_freq", type: :quantitative, title: "log₁₀(ω)")
+|> Vl.encode_field(:y, "phase", type: :quantitative, title: "Phase (deg)")
+```
