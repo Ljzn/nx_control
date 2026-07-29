@@ -14,9 +14,9 @@ Mix.install([
 alias VegaLite, as: Vl
 ```
 
-## 系统定义
+## System Definition
 
-考虑开环传递函数：
+Consider an open-loop transfer function:
 
 \[
 G(s) = \frac{1}{s(s+1)(s+10)}
@@ -26,13 +26,13 @@ G(s) = \frac{1}{s(s+1)(s+10)}
 tf = NxControl.TransferFunction.new([1], [1, 11, 10, 0])
 ```
 
-## 计算频率响应数据
+## Frequency Response Data
 
 ```elixir
 {freqs, mag, phase} = NxControl.FrequencyResp.bode_data(tf)
 ```
 
-## 幅频特性
+## Magnitude Plot
 
 ```elixir
 data = %{
@@ -47,7 +47,7 @@ Vl.new(width: 600, height: 300, title: "Bode Plot — Magnitude")
 |> Vl.encode_field(:y, "magnitude", type: :quantitative, title: "Magnitude (dB)")
 ```
 
-## 相频特性
+## Phase Plot
 
 ```elixir
 data2 = %{
@@ -62,22 +62,22 @@ Vl.new(width: 600, height: 300, title: "Bode Plot — Phase")
 |> Vl.encode_field(:y, "phase", type: :quantitative, title: "Phase (deg)")
 ```
 
-## 稳定裕度
+## Stability Margins
 
 ```elixir
 {gm_mag, gm_phase, pm_freq, pm_phase} = NxControl.FrequencyResp.margins(tf)
 ```
 
-| 裕度       | 值                                                                                                                                             |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Gain Margin  | #{if gm_mag == :infinity, do: "∞", else: Float.round(gm_mag, 4)}                                                                              |
+| Margin     | Value                                                                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gain Margin | #{if gm_mag == :infinity, do: "∞", else: Float.round(gm_mag, 4)}                                                                              |
 | Phase Margin | #{if pm_phase == nil, do: "—", else: Float.round(pm_phase, 2)}° at #{if pm_freq == nil, do: "—", else: "#{Float.round(pm_freq, 3)} rad/s"} |
 
 ---
 
-## MATLAB 时间常数形式示例
+## MATLAB Time-Constant Form Example
 
-MATLAB 中以 `(Ts + 1)` 格式定义的传递函数：
+Transfer function defined in MATLAB's `(Ts + 1)` format:
 
 ```matlab
 f0 = [0.82 1];
@@ -90,10 +90,10 @@ sys = tf(den1, den2)
 bode(sys)
 ```
 
-在 nx_control 中等价于：
+Equivalent in nx_control:
 
 ```elixir
-# 多项式乘法（conv）
+# Polynomial multiplication (conv)
 f0 = [0.82, 1.0]; f1 = [0.337, 1.0]
 f2 = [1.64, 1.0]; f3 = [0.07, 1.0]
 
@@ -113,7 +113,7 @@ tf_m = NxControl.TransferFunction.new(num, den)
 {freqs_m, mag_m, phase_m} = NxControl.FrequencyResp.bode_data(tf_m)
 ```
 
-### Bode 图
+### Bode Plot
 
 ```elixir
 data_m = %{
@@ -121,7 +121,7 @@ data_m = %{
   magnitude: Nx.to_flat_list(mag_m)
 }
 
-Vl.new(width: 600, height: 300, title: "MATLAB 传递函数 — 幅频")
+Vl.new(width: 600, height: 300, title: "MATLAB Transfer Function — Magnitude")
 |> Vl.data_from_values(data_m)
 |> Vl.mark(:line, color: "green")
 |> Vl.encode_field(:x, "log_freq", type: :quantitative, title: "log₁₀(ω)")
@@ -134,7 +134,7 @@ data_m2 = %{
   phase: Nx.to_flat_list(phase_m)
 }
 
-Vl.new(width: 600, height: 300, title: "MATLAB 传递函数 — 相频")
+Vl.new(width: 600, height: 300, title: "MATLAB Transfer Function — Phase")
 |> Vl.data_from_values(data_m2)
 |> Vl.mark(:line, color: "green")
 |> Vl.encode_field(:x, "log_freq", type: :quantitative, title: "log₁₀(ω)")

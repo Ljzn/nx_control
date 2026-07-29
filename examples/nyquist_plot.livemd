@@ -12,9 +12,9 @@ Mix.install([
 ])
 ```
 
-## 系统定义
+## System Definition
 
-考虑开环传递函数：
+Consider an open-loop transfer function:
 
 \[
 G(s) = \frac{1}{s(s+1)(s+10)}
@@ -24,7 +24,7 @@ G(s) = \frac{1}{s(s+1)(s+10)}
 tf = NxControl.TransferFunction.new([1], [1, 11, 10, 0])
 ```
 
-## Nyquist 数据
+## Nyquist Data
 
 ```elixir
 {real, imag} = NxControl.FrequencyResp.nyquist_data(tf)
@@ -34,22 +34,22 @@ imag_list = Nx.to_flat_list(imag)
 imag_neg = Enum.map(imag_list, &(-&1))
 ```
 
-## 绘图
+## Plot
 
 ```elixir
-# 正频率（ω ≥ 0）部分 — 蓝色实线
+# Positive frequency (ω ≥ 0) — solid blue line
 pos = %{
   real: real_list,
   imag: imag_list
 }
 
-# 负频率（ω < 0）部分 — 蓝色虚线
+# Negative frequency (ω < 0) — dashed blue line
 neg = %{
   real: Enum.reverse(real_list),
   imag: Enum.reverse(imag_neg)
 }
 
-# 临界点 (-1, j0)
+# Critical point (-1, j0)
 crit = %{
   real: [-1.0],
   imag: [0.0]
@@ -75,36 +75,36 @@ Vl.new(width: 500, height: 500, title: "Nyquist Plot")
 ])
 ```
 
-## Nyquist 稳定判据
+## Nyquist Stability Criterion
 
-根据 Nyquist 稳定判据：
+From the Nyquist stability criterion:
 
 \[
 Z = P - N
 \]
 
-其中：
+where:
 
-- `P` = 开环不稳定极点数（实部 > 0 的极点）
-- `N` = Nyquist 曲线环绕点 (-1, j0) 的**逆时针**次数
-- `Z` = 闭环不稳定极点数
+* `P` = number of unstable open-loop poles (Re > 0)
+* `N` = number of **counter-clockwise** encirclements of (-1, j0)
+* `Z` = number of unstable closed-loop poles
 
 ```elixir
-# 开环极点
+# Open-loop poles
 poles = NxControl.TransferFunction.poles(tf)
 p_unstable = Nx.to_flat_list(Nx.real(poles))
 |> Enum.count(&(&1 > 1.0e-10))
 
-IO.puts "开环不稳定极点数 P = #{p_unstable}"
+IO.puts "Unstable open-loop poles P = #{p_unstable}"
 
-# 检查曲线是否靠近临界点 (-1, j0)
+# Check if the curve passes near the critical point (-1, j0)
 near_critical = Enum.zip(real_list, imag_list)
 |> Enum.any?(fn {r, i} -> (r + 1) ** 2 + i ** 2 < 0.01 end)
 
-IO.puts "曲线经过临界点附近? #{near_critical}"
+IO.puts "Curve near critical point? #{near_critical}"
 ```
 
-## 稳定裕度
+## Stability Margins
 
 ```elixir
 {gm_mag, gm_phase, pm_freq, pm_phase} = NxControl.FrequencyResp.margins(tf)
