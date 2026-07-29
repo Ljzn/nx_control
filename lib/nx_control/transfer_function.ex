@@ -60,14 +60,58 @@ defmodule NxControl.TransferFunction do
   @doc """
   Returns the poles of the transfer function (roots of denominator).
 
+  Uses the companion matrix eigenvalue method by default, which is
+  numerically robust for high-order polynomials. Falls back to the DKA
+  (Durand-Kerner-Aberth) algorithm if the `:dka` method is requested.
+
+  ## Options
+
+    * `:method` — `:companion` (default) or `:dka`
+
   ## Examples
 
       iex> tf = NxControl.TransferFunction.new([1], [1, 3, 2])
       iex> NxControl.TransferFunction.poles(tf)
       #Nx.Tensor<c128[2] [-1.0+0.0i, -2.0+0.0i]>
   """
-  def poles(tf) do
-    dka_roots(tf.den)
+  def poles(tf, opts \\ []) do
+    method = Keyword.get(opts, :method, :companion)
+
+    case method do
+      :dka -> dka_roots(tf.den)
+      :companion -> companion_poles(tf.den)
+    end
+  end
+
+  defp companion_poles(den) do
+    n = Nx.size(den) - 1
+
+    if n <= 0 do
+      Nx.tensor([])
+    else
+      den_list = Nx.to_flat_list(den)
+      a0 = hd(den_list)
+      tail = Enum.drop(den_list, 1) |> Enum.map(fn c -> -c / a0 end)
+
+      # Build companion matrix
+      mat = List.duplicate(0.0, n * n)
+      mat = Enum.reduce(0..(n - 1), mat, fn j, acc ->
+        List.replace_at(acc, j * n + j, 0.0)
+      end)
+      # First row
+      mat = Enum.reduce(0..(n - 1), mat, fn j, acc ->
+        List.replace_at(acc, j, Enum.at(tail, j))
+      end)
+      # Identity sub-diagonal
+      mat = Enum.reduce(1..(n - 1), mat, fn i, acc ->
+        List.replace_at(acc, i * n + (i - 1), 1.0)
+      end)
+
+      cm = Nx.tensor(mat, type: :f64) |> Nx.reshape({n, n})
+      {wr, wi} = Nx.Lapack.eigvals(cm)
+
+      Nx.add(Nx.as_type(wr, {:c, 128}), Nx.multiply(Nx.as_type(wi, {:c, 128}), Complex.new(0, 1)))
+    end
   end
 
   @doc """
