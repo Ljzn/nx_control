@@ -1,0 +1,111 @@
+# Nyquist Plot Example
+
+## Setup
+
+```elixir
+Mix.install([
+  {:nx, "~> 0.13"},
+  {:nx_lapack, path: System.fetch_env!("HOME") <> "/Documents/forks/nx_lapack"},
+  {:nx_control, path: System.fetch_env!("HOME") <> "/Documents/forks/nx_control"},
+  {:vega_lite, "~> 0.1"},
+  {:kino_vega_lite, "~> 0.1"}
+])
+```
+
+## 系统定义
+
+考虑开环传递函数：
+
+\[
+G(s) = \frac{1}{s(s+1)(s+10)}
+\]
+
+```elixir
+tf = NxControl.TransferFunction.new([1], [1, 11, 10, 0])
+```
+
+## Nyquist 数据
+
+```elixir
+{real, imag} = NxControl.FrequencyResp.nyquist_data(tf)
+
+# 也计算负频率部分（共轭对称）
+real_neg = Nx.to_flat_list(real)
+imag_neg = Enum.map(Nx.to_flat_list(imag), &(-&1))
+```
+
+## 绘图
+
+```elixir
+# 正频率（ω ≥ 0）部分
+pos_data = %{
+  real: real_neg,
+  imag: Enum.map(Nx.to_flat_list(imag), &(&1))
+}
+
+# 负频率（ω < 0）部分
+neg_data = %{
+  real: Enum.reverse(real_neg),
+  imag: Enum.reverse(imag_neg)
+}
+
+Vl.new(width: 500, height: 500, title: "Nyquist Plot")
+|> Vl.layers([
+  Vl.new()
+  |> Vl.data_from_values(pos_data)
+  |> Vl.mark_line(color: "steelblue")
+  |> Vl.encode_field(:x, "real", type: :quantitative, title: "Re(G(jω))")
+  |> Vl.encode_field(:y, "imag", type: :quantitative, title: "Im(G(jω))"),
+  Vl.new()
+  |> Vl.data_from_values(neg_data)
+  |> Vl.mark_line(color: "steelblue", opacity: 0.4)
+  |> Vl.encode_field(:x, "real", type: :quantitative)
+  |> Vl.encode_field(:y, "imag", type: :quantitative),
+  # 标记临界点 (-1, j0)
+  Vl.new()
+  |> Vl.data_from_values(%{x: [-1], y: [0]})
+  |> Vl.mark_point(color: "red", size: 100, shape: "cross")
+  |> Vl.encode_field(:x, "x", type: :quantitative)
+  |> Vl.encode_field(:y, "y", type: :quantitative)
+])
+```
+
+## Nyquist 稳定判据
+
+根据 Nyquist 稳定判据：
+
+\[
+Z = P - N
+\]
+
+其中：
+
+- `P` = 开环不稳定极点数（实部 > 0 的极点）
+- `N` = Nyquist 曲线环绕点 (-1, j0) 的**逆时针**次数
+- `Z` = 闭环不稳定极点数
+
+```elixir
+# 开环极点
+poles = NxControl.TransferFunction.poles(tf)
+p_unstable = Nx.to_flat_list(Nx.real(poles))
+|> Enum.count(&(&1 > 1.0e-10))
+
+IO.puts "开环不稳定极点数 P = #{p_unstable}"
+
+# 检查曲线是否穿过 (-1, j0)
+real_list = Nx.to_flat_list(real)
+imag_list = Nx.to_flat_list(imag)
+near_critical = Enum.zip(real_list, imag_list)
+|> Enum.any?(fn {r, i} -> (r + 1) ** 2 + i ** 2 < 0.01 end)
+
+IO.puts "曲线经过临界点附近? #{near_critical}"
+```
+
+## 稳定裕度
+
+```elixir
+{gm_mag, gm_phase, pm_freq, pm_phase} = NxControl.FrequencyResp.margins(tf)
+
+IO.puts "Gain Margin: #{if gm_mag == :infinity, do: "∞", else: Float.round(gm_mag, 4)}"
+IO.puts "Phase Margin: #{if pm_phase == nil, do: "—", else: "#{Float.round(pm_phase, 2)}°"}"
+```

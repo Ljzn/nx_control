@@ -1,0 +1,70 @@
+# Bode Plot Example
+
+## Setup
+
+```elixir
+Mix.install([
+  {:nx, "~> 0.13"},
+  {:nx_lapack, path: System.fetch_env!("HOME") <> "/Documents/forks/nx_lapack"},
+  {:nx_control, path: System.fetch_env!("HOME") <> "/Documents/forks/nx_control"},
+  {:vega_lite, "~> 0.1"},
+  {:kino_vega_lite, "~> 0.1"}
+])
+```
+
+## 系统定义
+
+考虑开环传递函数：
+
+\[
+G(s) = \frac{1}{s(s+1)(s+10)}
+\]
+
+```elixir
+tf = NxControl.TransferFunction.new([1], [1, 11, 10, 0])
+```
+
+## 计算频率响应数据
+
+```elixir
+{freqs, mag, phase} = NxControl.FrequencyResp.bode_data(tf)
+```
+
+## 幅频特性
+
+```elixir
+Vl.new(width: 600, height: 300, title: "Bode Plot — Magnitude")
+|> Vl.data_from_values(%{
+  frequency: Nx.to_flat_list(freqs),
+  magnitude: Nx.to_flat_list(mag)
+})
+|> Vl.transform(type: "calculate", expr: "log10(datum.frequency)", as: "log_freq")
+|> Vl.mark_line()
+|> Vl.encode_field(:x, "log_freq", type: :quantitative, title: "log₁₀(ω)")
+|> Vl.encode_field(:y, "magnitude", type: :quantitative, title: "Magnitude (dB)")
+```
+
+## 相频特性
+
+```elixir
+Vl.new(width: 600, height: 300, title: "Bode Plot — Phase")
+|> Vl.data_from_values(%{
+  frequency: Nx.to_flat_list(freqs),
+  phase: Nx.to_flat_list(phase)
+})
+|> Vl.transform(type: "calculate", expr: "log10(datum.frequency)", as: "log_freq")
+|> Vl.mark_line()
+|> Vl.encode_field(:x, "log_freq", type: :quantitative, title: "log₁₀(ω)")
+|> Vl.encode_field(:y, "phase", type: :quantitative, title: "Phase (deg)")
+```
+
+## 稳定裕度
+
+```elixir
+{gm_mag, gm_phase, pm_freq, pm_phase} = NxControl.FrequencyResp.margins(tf)
+```
+
+| 裕度       | 值                                                                                                                                             |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gain Margin  | #{if gm_mag == :infinity, do: "∞", else: Float.round(gm_mag, 4)}                                                                              |
+| Phase Margin | #{if pm_phase == nil, do: "—", else: Float.round(pm_phase, 2)}° at #{if pm_freq == nil, do: "—", else: "#{Float.round(pm_freq, 3)} rad/s"} |
