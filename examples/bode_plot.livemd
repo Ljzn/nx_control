@@ -10,6 +10,8 @@ Mix.install([
   {:vega_lite, "~> 0.1"},
   {:kino_vega_lite, "~> 0.1"}
 ])
+
+alias VegaLite, as: Vl
 ```
 
 ## 系统定义
