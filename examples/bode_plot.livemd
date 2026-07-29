@@ -10,8 +10,6 @@ Mix.install([
   {:vega_lite, "~> 0.1"},
   {:kino_vega_lite, "~> 0.1"}
 ])
-
-alias VegaLite, as: Vl
 ```
 
 ## 系统定义
@@ -35,13 +33,14 @@ tf = NxControl.TransferFunction.new([1], [1, 11, 10, 0])
 ## 幅频特性
 
 ```elixir
-Vl.new(width: 600, height: 300, title: "Bode Plot — Magnitude")
-|> Vl.data_from_values(%{
-  frequency: Nx.to_flat_list(freqs),
+data = %{
+  log_freq: Nx.to_flat_list(freqs) |> Enum.map(&:math.log10/1),
   magnitude: Nx.to_flat_list(mag)
-})
-|> Vl.transform(type: "calculate", expr: "log10(datum.frequency)", as: "log_freq")
-|> Vl.mark_line()
+}
+
+Vl.new(width: 600, height: 300, title: "Bode Plot — Magnitude")
+|> Vl.data_from_values(data)
+|> Vl.mark(:line)
 |> Vl.encode_field(:x, "log_freq", type: :quantitative, title: "log₁₀(ω)")
 |> Vl.encode_field(:y, "magnitude", type: :quantitative, title: "Magnitude (dB)")
 ```
@@ -49,13 +48,14 @@ Vl.new(width: 600, height: 300, title: "Bode Plot — Magnitude")
 ## 相频特性
 
 ```elixir
-Vl.new(width: 600, height: 300, title: "Bode Plot — Phase")
-|> Vl.data_from_values(%{
-  frequency: Nx.to_flat_list(freqs),
+data2 = %{
+  log_freq: Nx.to_flat_list(freqs) |> Enum.map(&:math.log10/1),
   phase: Nx.to_flat_list(phase)
-})
-|> Vl.transform(type: "calculate", expr: "log10(datum.frequency)", as: "log_freq")
-|> Vl.mark_line()
+}
+
+Vl.new(width: 600, height: 300, title: "Bode Plot — Phase")
+|> Vl.data_from_values(data2)
+|> Vl.mark(:line)
 |> Vl.encode_field(:x, "log_freq", type: :quantitative, title: "log₁₀(ω)")
 |> Vl.encode_field(:y, "phase", type: :quantitative, title: "Phase (deg)")
 ```
@@ -66,7 +66,7 @@ Vl.new(width: 600, height: 300, title: "Bode Plot — Phase")
 {gm_mag, gm_phase, pm_freq, pm_phase} = NxControl.FrequencyResp.margins(tf)
 ```
 
-| 裕度       | 值                                                                                                                                             |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Gain Margin  | #{if gm_mag == :infinity, do: "∞", else: Float.round(gm_mag, 4)}                                                                              |
+| 裕度 | 值 |
+|------|-----|
+| Gain Margin | #{if gm_mag == :infinity, do: "∞", else: Float.round(gm_mag, 4)} |
 | Phase Margin | #{if pm_phase == nil, do: "—", else: Float.round(pm_phase, 2)}° at #{if pm_freq == nil, do: "—", else: "#{Float.round(pm_freq, 3)} rad/s"} |

@@ -10,8 +10,6 @@ Mix.install([
   {:vega_lite, "~> 0.1"},
   {:kino_vega_lite, "~> 0.1"}
 ])
-
-alias VegaLite, as: Vl
 ```
 
 ## 系统定义
@@ -31,44 +29,49 @@ tf = NxControl.TransferFunction.new([1], [1, 11, 10, 0])
 ```elixir
 {real, imag} = NxControl.FrequencyResp.nyquist_data(tf)
 
-# 也计算负频率部分（共轭对称）
-real_neg = Nx.to_flat_list(real)
-imag_neg = Enum.map(Nx.to_flat_list(imag), &(-&1))
+real_list = Nx.to_flat_list(real)
+imag_list = Nx.to_flat_list(imag)
+imag_neg = Enum.map(imag_list, &(-&1))
 ```
 
 ## 绘图
 
 ```elixir
-# 正频率（ω ≥ 0）部分
-pos_data = %{
-  real: real_neg,
-  imag: Enum.map(Nx.to_flat_list(imag), &(&1))
+# 正频率（ω ≥ 0）部分 — 蓝色实线
+pos = %{
+  real: real_list,
+  imag: imag_list
 }
 
-# 负频率（ω < 0）部分
-neg_data = %{
-  real: Enum.reverse(real_neg),
+# 负频率（ω < 0）部分 — 蓝色虚线
+neg = %{
+  real: Enum.reverse(real_list),
   imag: Enum.reverse(imag_neg)
+}
+
+# 临界点 (-1, j0)
+crit = %{
+  real: [-1.0],
+  imag: [0.0]
 }
 
 Vl.new(width: 500, height: 500, title: "Nyquist Plot")
 |> Vl.layers([
   Vl.new()
-  |> Vl.data_from_values(pos_data)
-  |> Vl.mark_line(color: "steelblue")
+  |> Vl.data_from_values(pos)
+  |> Vl.mark(:line, color: "steelblue")
   |> Vl.encode_field(:x, "real", type: :quantitative, title: "Re(G(jω))")
   |> Vl.encode_field(:y, "imag", type: :quantitative, title: "Im(G(jω))"),
   Vl.new()
-  |> Vl.data_from_values(neg_data)
-  |> Vl.mark_line(color: "steelblue", opacity: 0.4)
+  |> Vl.data_from_values(neg)
+  |> Vl.mark(:line, color: "steelblue", opacity: 0.4, stroke_dash: [4, 4])
   |> Vl.encode_field(:x, "real", type: :quantitative)
   |> Vl.encode_field(:y, "imag", type: :quantitative),
-  # 标记临界点 (-1, j0)
   Vl.new()
-  |> Vl.data_from_values(%{x: [-1], y: [0]})
-  |> Vl.mark_point(color: "red", size: 100, shape: "cross")
-  |> Vl.encode_field(:x, "x", type: :quantitative)
-  |> Vl.encode_field(:y, "y", type: :quantitative)
+  |> Vl.data_from_values(crit)
+  |> Vl.mark(:point, color: "red", size: 100, shape: "cross")
+  |> Vl.encode_field(:x, "real", type: :quantitative)
+  |> Vl.encode_field(:y, "imag", type: :quantitative)
 ])
 ```
 
@@ -94,9 +97,7 @@ p_unstable = Nx.to_flat_list(Nx.real(poles))
 
 IO.puts "开环不稳定极点数 P = #{p_unstable}"
 
-# 检查曲线是否穿过 (-1, j0)
-real_list = Nx.to_flat_list(real)
-imag_list = Nx.to_flat_list(imag)
+# 检查曲线是否靠近临界点 (-1, j0)
 near_critical = Enum.zip(real_list, imag_list)
 |> Enum.any?(fn {r, i} -> (r + 1) ** 2 + i ** 2 < 0.01 end)
 
