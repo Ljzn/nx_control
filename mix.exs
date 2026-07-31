@@ -21,7 +21,8 @@ defmodule NxControl.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:nx, "~> 0.11"}
+      {:nx, "~> 0.13"},
+      {:nx_lapack, path: "../nx_lapack"}
     ]
   end
 end

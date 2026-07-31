@@ -1,0 +1,114 @@
+# Nyquist Plot Example
+
+## Setup
+
+```elixir
+Mix.install([
+  {:nx, "~> 0.13"},
+  {:nx_lapack, path: System.fetch_env!("HOME") <> "/Documents/forks/nx_lapack"},
+  {:nx_control, path: System.fetch_env!("HOME") <> "/Documents/forks/nx_control"},
+  {:vega_lite, "~> 0.1"},
+  {:kino_vega_lite, "~> 0.1"}
+])
+```
+
+## System Definition
+
+Consider an open-loop transfer function:
+
+\[
+G(s) = \frac{1}{s(s+1)(s+10)}
+\]
+
+```elixir
+tf = NxControl.TransferFunction.new([1], [1, 11, 10, 0])
+```
+
+## Nyquist Data
+
+```elixir
+{real, imag} = NxControl.FrequencyResp.nyquist_data(tf)
+
+real_list = Nx.to_flat_list(real)
+imag_list = Nx.to_flat_list(imag)
+imag_neg = Enum.map(imag_list, &(-&1))
+```
+
+## Plot
+
+```elixir
+# Positive frequency (ω ≥ 0) — solid blue line
+pos = %{
+  real: real_list,
+  imag: imag_list
+}
+
+# Negative frequency (ω < 0) — dashed blue line
+neg = %{
+  real: Enum.reverse(real_list),
+  imag: Enum.reverse(imag_neg)
+}
+
+# Critical point (-1, j0)
+crit = %{
+  real: [-1.0],
+  imag: [0.0]
+}
+
+Vl.new(width: 500, height: 500, title: "Nyquist Plot")
+|> Vl.layers([
+  Vl.new()
+  |> Vl.data_from_values(pos)
+  |> Vl.mark(:line, color: "steelblue")
+  |> Vl.encode_field(:x, "real", type: :quantitative, title: "Re(G(jω))")
+  |> Vl.encode_field(:y, "imag", type: :quantitative, title: "Im(G(jω))"),
+  Vl.new()
+  |> Vl.data_from_values(neg)
+  |> Vl.mark(:line, color: "steelblue", opacity: 0.4, stroke_dash: [4, 4])
+  |> Vl.encode_field(:x, "real", type: :quantitative)
+  |> Vl.encode_field(:y, "imag", type: :quantitative),
+  Vl.new()
+  |> Vl.data_from_values(crit)
+  |> Vl.mark(:point, color: "red", size: 100, shape: "cross")
+  |> Vl.encode_field(:x, "real", type: :quantitative)
+  |> Vl.encode_field(:y, "imag", type: :quantitative)
+])
+```
+
+## Nyquist Stability Criterion
+
+From the Nyquist stability criterion:
+
+\[
+Z = P - N
+\]
+
+where:
+
+* `P` = number of unstable open-loop poles (Re > 0)
+* `N` = number of **counter-clockwise** encirclements of (-1, j0)
+* `Z` = number of unstable closed-loop poles
+
+```elixir
+# Open-loop poles
+poles = NxControl.TransferFunction.poles(tf)
+p_unstable = Nx.to_flat_list(Nx.real(poles))
+|> Enum.count(&(&1 > 1.0e-10))
+
+IO.puts "Unstable open-loop poles P = #{p_unstable}"
+
+# Check if the curve passes near the critical point (-1, j0)
+near_critical = Enum.zip(real_list, imag_list)
+|> Enum.any?(fn {r, i} -> (r + 1) ** 2 + i ** 2 < 0.01 end)
+
+IO.puts "Curve near critical point? #{near_critical}"
+```
+
+## Stability Margins
+
+```elixir
+{gm_mag, gm_phase, pm_freq, pm_phase} = NxControl.FrequencyResp.margins(tf)
+
+IO.puts "Gain Margin: #{if gm_mag == :infinity, do: "∞", else: Float.round(gm_mag, 4)}"
+IO.puts "Phase Margin: #{if pm_phase == nil, do: "—", else: "#{Float.round(pm_phase, 2)}°"}"
+```
