@@ -68,9 +68,9 @@ Vl.new(width: 600, height: 300, title: "Bode Plot — Phase")
 {gm_mag, gm_phase, pm_freq, pm_phase} = NxControl.FrequencyResp.margins(tf)
 ```
 
-| Margin     | Value                                                                                                                                          |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Gain Margin | #{if gm_mag == :infinity, do: "∞", else: Float.round(gm_mag, 4)}                                                                              |
+| Margin       | Value                                                                                                                                           |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gain Margin  | #{if gm_mag == :infinity, do: "∞", else: Float.round(gm_mag, 4)}                                                                              |
 | Phase Margin | #{if pm_phase == nil, do: "—", else: Float.round(pm_phase, 2)}° at #{if pm_freq == nil, do: "—", else: "#{Float.round(pm_freq, 3)} rad/s"} |
 
 ---

@@ -95,17 +95,23 @@ defmodule NxControl.TransferFunction do
 
       # Build companion matrix
       mat = List.duplicate(0.0, n * n)
-      mat = Enum.reduce(0..(n - 1), mat, fn j, acc ->
-        List.replace_at(acc, j * n + j, 0.0)
-      end)
+
+      mat =
+        Enum.reduce(0..(n - 1), mat, fn j, acc ->
+          List.replace_at(acc, j * n + j, 0.0)
+        end)
+
       # First row
-      mat = Enum.reduce(0..(n - 1), mat, fn j, acc ->
-        List.replace_at(acc, j, Enum.at(tail, j))
-      end)
+      mat =
+        Enum.reduce(0..(n - 1), mat, fn j, acc ->
+          List.replace_at(acc, j, Enum.at(tail, j))
+        end)
+
       # Identity sub-diagonal
-      mat = Enum.reduce(1..(n - 1), mat, fn i, acc ->
-        List.replace_at(acc, i * n + (i - 1), 1.0)
-      end)
+      mat =
+        Enum.reduce(1..(n - 1), mat, fn i, acc ->
+          List.replace_at(acc, i * n + (i - 1), 1.0)
+        end)
 
       cm = Nx.tensor(mat, type: :f64) |> Nx.reshape({n, n})
       {wr, wi} = Nx.Lapack.eigvals(cm)
