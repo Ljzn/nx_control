@@ -24,6 +24,8 @@ defmodule NxControl.FrequencyResp do
   生成 Bode 图数据。
 
   返回 `{freqs, mag_db, phase_deg}`，三个 Nx 向量。
+  相位已解包（phase unwrapping），会在频率轴方向上连续累积，
+  与 MATLAB / scipy 的 `bode` 结果一致（例如三极点系统达到 -270°）。
 
   ## Options
 
@@ -56,8 +58,23 @@ defmodule NxControl.FrequencyResp do
     {
       Nx.tensor(freqs, type: :f64),
       Nx.tensor(Enum.reverse(mag), type: :f64),
-      Nx.tensor(Enum.reverse(phase), type: :f64)
+      Nx.tensor(phase |> Enum.reverse() |> unwrap_phase(), type: :f64)
     }
+  end
+
+  # Unwraps the raw atan2 phase (bounded to [-180, 180]) so it accumulates
+  # continuously across frequency, matching MATLAB and scipy. Each pole or zero
+  # contributes -90° / +90° at high frequency, so e.g. a 3-pole system reaches
+  # -270° instead of being wrapped to +90°.
+  defp unwrap_phase([first | rest]) do
+    {unwrapped, _} =
+      Enum.map_reduce(rest, first, fn phase, prev ->
+        adjustment = round((phase - prev + 180.0) / 360.0) * 360.0
+        unwrapped = phase - adjustment
+        {unwrapped, unwrapped}
+      end)
+
+    [first | unwrapped]
   end
 
   @doc """
