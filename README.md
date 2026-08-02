@@ -90,11 +90,11 @@ Full API documentation is available at [hexdocs.pm/nx_control](https://hexdocs.p
 
 `examples/svd_cat.exs` demonstrates `Nx.Lapack.svd` (via the `nx_lapack` dependency) by drawing an orange tabby cat *procedurally* in Nx — no external images — decomposing each RGB channel, and reconstructing the image at different singular-value ranks. The full-rank reconstruction restores the original; low ranks show the classic SVD compression trade-off.
 
-| Original | rank k = 8 | rank k = 32 |
+| Original (128×128) | rank k = 8 | rank k = 32 |
 |:---:|:---:|:---:|
-| <img src="examples/images/svd_cat/orange_cat_original.png" width="160"> | <img src="examples/images/svd_cat/orange_cat_k8.png" width="160"> | <img src="examples/images/svd_cat/orange_cat_k32.png" width="160"> |
+| <img src="examples/images/svd_cat/orange_cat_original.png" width="180"> | <img src="examples/images/svd_cat/orange_cat_k8.png" width="180"> | <img src="examples/images/svd_cat/orange_cat_k32.png" width="180"> |
 
-The cat is rendered with soft golden lighting, half-closed eyes and a faint smile to give it a warm, serene mood. The script also writes the results as dependency-free 24-bit BMP bitmaps into `examples/images/svd_cat/`:
+The cat is rendered with fine fur grain, tabby stripes, detailed half-closed eyes (amber iris, slit pupil, highlight), pink nose, whiskers, a chest patch, paws, tail and a soft ground shadow — a warm, serene mood expressed through light and geometry. The script also writes the results as dependency-free 24-bit BMP bitmaps into `examples/images/svd_cat/`:
 
 ```bash
 mix run examples/svd_cat.exs
