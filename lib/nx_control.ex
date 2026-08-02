@@ -4,7 +4,9 @@ defmodule NxControl do
 
   Built on Nx, provides transfer function analysis, Routh-Hurwitz
   stability criterion, pole/zero computation via the DKA algorithm,
-  and frequency response evaluation.
+  and frequency response evaluation. It also includes `NxControl.Vision`,
+  a dependency-free image "sight" tool that turns a bitmap into a text
+  report an LLM can read.
 
   ## Example
 
@@ -19,5 +21,8 @@ defmodule NxControl do
   ## Core modules
 
       #{NxControl.TransferFunction}  — Transfer function representation and analysis
+      #{NxControl.FrequencyResp}    — Bode / Nyquist data and stability margins
+      #{NxControl.SteadyState}      — Steady-state error analysis
+      #{NxControl.Vision}           — Image analysis into a readable text report
   """
 end

@@ -12,6 +12,7 @@
 - **Stability analysis** — Routh-Hurwitz criterion (characteristic polynomial coefficients)
 - **Pole/zero computation** — DKA (Durand-Kerner-Aberth) polynomial root finder
 - **Frequency response** — evaluate `G(s)` at any complex frequency `s`
+- **Image sight (`NxControl.Vision`)** — turn a bitmap into a plain-text report an LLM can read (colors, a coarse color grid, edges, the singular value spectrum and a texture map), plus BMP I/O and SVD low-rank reconstruction — all pure Nx, no external dependencies
 - **No external dependencies** — pure Nx, works on all backends (BinaryBackend, EXLA, EMLX)
 
 ## Installation
@@ -64,6 +65,23 @@ NxControl provides two complementary methods for stability analysis:
 | Routh-Hurwitz | `stable?/1` | Examines coefficient signs and builds the Routh array | Fast, no root computation needed; works for any polynomial |
 | Pole-based | `pole_stable?/1` | Computes all poles via DKA and checks real parts | Gives exact pole locations for deeper analysis |
 
+## Vision — see an image as text
+
+`NxControl.Vision` gives a large language model a way to *read* a bitmap
+without any multimodal weights: it reduces an image to a compact text report.
+
+```elixir
+img = NxControl.Vision.read_bmp("examples/images/svd_cat/orange_cat_original.bmp")
+IO.puts(NxControl.Vision.to_text(NxControl.Vision.analyze(img)))
+```
+
+The report includes per-channel color statistics, the dominant hues, a coarse
+color-letter grid, edge energy/orientation, the singular value spectrum
+(with cumulative-energy ranks) and a per-cell texture flatness map. Additional
+helpers: `ascii/2` (image → text grid), `compress/2` (SVD low-rank
+"painting") and `mosaic/2` (block-average sketch). All implemented with pure
+`Nx` + `Nx.Lapack` — no external image or ML dependencies.
+
 ## Documentation
 
 Full API documentation is available at [hexdocs.pm/nx_control](https://hexdocs.pm/nx_control).
@@ -72,11 +90,11 @@ Full API documentation is available at [hexdocs.pm/nx_control](https://hexdocs.p
 
 `examples/svd_cat.exs` demonstrates `Nx.Lapack.svd` (via the `nx_lapack` dependency) by drawing an orange tabby cat *procedurally* in Nx — no external images — decomposing each RGB channel, and reconstructing the image at different singular-value ranks. The full-rank reconstruction restores the original; low ranks show the classic SVD compression trade-off.
 
-| Original | rank k = 8 | rank k = 32 |
+| Original (128×128) | rank k = 8 | rank k = 32 |
 |:---:|:---:|:---:|
-| <img src="examples/images/svd_cat/orange_cat_original.png" width="160"> | <img src="examples/images/svd_cat/orange_cat_k8.png" width="160"> | <img src="examples/images/svd_cat/orange_cat_k32.png" width="160"> |
+| <img src="examples/images/svd_cat/orange_cat_original.png" width="180"> | <img src="examples/images/svd_cat/orange_cat_k8.png" width="180"> | <img src="examples/images/svd_cat/orange_cat_k32.png" width="180"> |
 
-The cat is rendered with soft golden lighting, half-closed eyes and a faint smile to give it a warm, serene mood. The script also writes the results as dependency-free 24-bit BMP bitmaps into `examples/images/svd_cat/`:
+The cat is rendered with fine fur grain, tabby stripes, detailed half-closed eyes (amber iris, slit pupil, highlight), pink nose, whiskers, a chest patch, paws, tail and a soft ground shadow — a warm, serene mood expressed through light and geometry. The script also writes the results as dependency-free 24-bit BMP bitmaps into `examples/images/svd_cat/`:
 
 ```bash
 mix run examples/svd_cat.exs
