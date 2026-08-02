@@ -68,6 +68,22 @@ NxControl provides two complementary methods for stability analysis:
 
 Full API documentation is available at [hexdocs.pm/nx_control](https://hexdocs.pm/nx_control).
 
+## SVD-Painted Orange Cat (Example)
+
+`examples/svd_cat.exs` demonstrates `Nx.Lapack.svd` (via the `nx_lapack` dependency) by drawing an orange tabby cat *procedurally* in Nx — no external images — decomposing each RGB channel, and reconstructing the image at different singular-value ranks. The full-rank reconstruction restores the original; low ranks show the classic SVD compression trade-off.
+
+| Original | rank k = 8 | rank k = 32 |
+|:---:|:---:|:---:|
+| <img src="examples/images/svd_cat/orange_cat_original.png" width="160"> | <img src="examples/images/svd_cat/orange_cat_k8.png" width="160"> | <img src="examples/images/svd_cat/orange_cat_k32.png" width="160"> |
+
+The cat is rendered with soft golden lighting, half-closed eyes and a faint smile to give it a warm, serene mood. The script also writes the results as dependency-free 24-bit BMP bitmaps into `examples/images/svd_cat/`:
+
+```bash
+mix run examples/svd_cat.exs
+```
+
+The images are also available in `examples/images/svd_cat/` as `.bmp` (raw output) and `.png` (for the web).
+
 ## License
 
 NxControl is released under the Apache-2.0 License. See [LICENSE](LICENSE) for details.
