@@ -10,33 +10,6 @@
 # gentle eyes and a faint smile — a calm, cozy mood expressed through
 # light and geometry rather than photographic detail.
 
-defmodule Bmp do
-  # Write a 24-bit BMP from an H×W×3 tensor with values in 0..255.
-  def write(path, rgb) do
-    {h, w, 3} = Nx.shape(rgb)
-    bin = Nx.to_binary(Nx.as_type(rgb, :u8))
-    row_pad = rem(4 - rem(w * 3, 4), 4)
-    row_size = w * 3 + row_pad
-    data_size = row_size * h
-    file_size = 54 + data_size
-
-    header =
-      <<0x42, 0x4D, file_size::little-32, 0::little-32, 54::little-32, 40::little-32,
-        w::little-32, h::little-32, 1::little-16, 24::little-16, 0::little-32,
-        data_size::little-32, 2835::little-32, 2835::little-32, 0::little-32, 0::little-32>>
-
-    rows =
-      for row <- (h - 1)..0//-1 do
-        row_bin = binary_part(bin, row * w * 3, w * 3)
-        bgr = for <<r, g, b <- row_bin>>, into: <<>>, do: <<b, g, r>>
-        bgr <> :binary.copy(<<0>>, row_pad)
-      end
-
-    File.write!(path, header <> IO.iodata_to_binary(rows))
-    file_size
-  end
-end
-
 defmodule OrangeCat do
   # Procedurally render an orange tabby cat into an H×W×3 RGB tensor (0..255).
   def render(h, w) do
@@ -234,7 +207,7 @@ File.mkdir_p!(out_dir)
 
 IO.puts("Rendering orange cat (#{w}x#{h})...")
 cat = OrangeCat.render(h, w)
-Bmp.write(Path.join(out_dir, "orange_cat_original.bmp"), cat)
+NxControl.Vision.write_bmp(Path.join(out_dir, "orange_cat_original.bmp"), cat)
 IO.puts("  saved orange_cat_original.bmp")
 
 IO.puts("Decomposing each RGB channel with Nx.Lapack.svd...")
@@ -245,7 +218,7 @@ for k <- [8, 16, 32, 96] do
   IO.puts("  painting at rank k=#{k}...")
   {t, painted} = :timer.tc(fn -> SvdPaint.paint(chans, k, h, w) end)
   path = Path.join(out_dir, "orange_cat_k#{k}.bmp")
-  size = Bmp.write(path, painted)
+  size = NxControl.Vision.write_bmp(path, painted)
   IO.puts("    #{Path.basename(path)}  (#{Float.round(t / 1000, 1)} ms, #{div(size, 1024)} KB)")
 end
 

@@ -1,39 +1,41 @@
 defmodule NxControl.FrequencyResp do
   @moduledoc """
-  频率响应分析 — Bode 图、Nyquist 图的数据生成。
+  Frequency response analysis — data generation for Bode and Nyquist plots.
 
-  返回纯数据（频率/幅值/相角/实部/虚部），不依赖任何绘图库。
-  数据可直接用于 Livebook 的 VegaLite 绘图或导出到外部工具。
+  Returns pure data (frequency / magnitude / phase / real / imaginary parts)
+  with no dependency on any plotting library. The data can be plotted directly
+  with VegaLite in Livebook or exported to external tools.
 
-  ## Bode 图
+  ## Bode plot
 
-  Bode 图由两张子图组成：
+  The Bode plot consists of two subplots:
 
-    * 幅频特性：增益（dB）vs 角频率（对数坐标）
-    * 相频特性：相位（度）vs 角频率（对数坐标）
+    * Magnitude: gain (dB) vs angular frequency (log scale)
+    * Phase: phase (degrees) vs angular frequency (log scale)
 
-  ## Nyquist 图
+  ## Nyquist plot
 
-  Nyquist 图绘制 Re(G(jω)) vs Im(G(jω))，ω 从 0 到 +∞。
-  用于 Nyquist 稳定判据。
+  The Nyquist plot traces Re(G(jω)) vs Im(G(jω)) for ω from 0 to +∞,
+  used for the Nyquist stability criterion.
   """
 
   alias NxControl.TransferFunction
 
   @doc """
-  生成 Bode 图数据。
+  Generates Bode plot data.
 
-  返回 `{freqs, mag_db, phase_deg}`，三个 Nx 向量。
-  相位已解包（phase unwrapping），会在频率轴方向上连续累积，
-  与 MATLAB / scipy 的 `bode` 结果一致（例如三极点系统达到 -270°）。
+  Returns `{freqs, mag_db, phase_deg}`, three Nx vectors.
+  The phase is unwrapped so it accumulates continuously along the frequency
+  axis, matching MATLAB / scipy's `bode` (e.g. a three-pole system reaches
+  -270°).
 
   ## Options
 
-    * `:n_points` — 频率点数量。默认 `200`。
-    * `:freq_range` — `{log10(w_start), log10(w_end)}`。默认 `{-2, 4}`（即 10⁻² ~ 10⁴ rad/s）。
-    * `:method` — 极点求法，传给 `TransferFunction.poles/2`。默认 `:companion`。
+    * `:n_points` — number of frequency points. Default `200`.
+    * `:freq_range` — `{log10(w_start), log10(w_end)}`. Default `{-2, 4}` (i.e. 10⁻² ~ 10⁴ rad/s).
+    * `:method` — pole method, forwarded to `TransferFunction.poles/2`. Default `:companion`.
 
-  ## 示例
+  ## Examples
 
       tf = NxControl.TransferFunction.new([1], [1, 2, 1])
       {freqs, mag_db, phase_deg} = NxControl.FrequencyResp.bode_data(tf)
@@ -78,15 +80,15 @@ defmodule NxControl.FrequencyResp do
   end
 
   @doc """
-  生成 Nyquist 图数据。
+  Generates Nyquist plot data.
 
-  返回 `{real, imag}`，两个 Nx 向量，构成 G(jω) 在复平面上的轨迹。
+  Returns `{real, imag}`, two Nx vectors tracing G(jω) in the complex plane.
 
   ## Options
 
-    同 `bode_data/2`。
+    Same as `bode_data/2`.
 
-  ## 示例
+  ## Examples
 
       tf = NxControl.TransferFunction.new([1], [1, 1])
       {real, imag} = NxControl.FrequencyResp.nyquist_data(tf)
@@ -112,22 +114,22 @@ defmodule NxControl.FrequencyResp do
   end
 
   @doc """
-  计算幅值裕度（Gain Margin）和相角裕度（Phase Margin）。
+  Computes gain margin and phase margin.
 
-  返回 `{gm_mag, gm_phase, pm_freq, pm_phase}`：
+  Returns `{gm_mag, gm_phase, pm_freq, pm_phase}`:
 
-    * `gm_mag` — 幅值裕度（线性），即相角交叉点处 \|G(jω)\| 的倒数
-    * `gm_phase` — 相角交叉点处的相角（度）
-    * `pm_freq` — 增益交叉点处的角频率（rad/s）
-    * `pm_phase` — 增益交叉点处的相角距离 -180° 的差值（度）
+    * `gm_mag` — gain margin (linear), the reciprocal of \|G(jω)\| at the phase crossover
+    * `gm_phase` — phase (degrees) at the phase crossover
+    * `pm_freq` — angular frequency (rad/s) at the gain crossover
+    * `pm_phase` — phase margin (degrees), the distance of the phase from -180°
 
-  若交叉点不存在，对应值为 `:infinity` 或 `nil`。
+  If a crossover is not found, the corresponding value is `:infinity` or `nil`.
 
   ## Options
 
-    同 `bode_data/2`，额外：
+    Same as `bode_data/2`, plus:
 
-    * `:gm_tol` — 搜索相角交叉点的容差，默认 `0.5` 度。
+    * `:gm_tol` — tolerance for locating the phase crossover. Default `0.5` degrees.
   """
   def margins(tf, opts \\ []) do
     n = opts[:n_points] || 2000
@@ -150,7 +152,7 @@ defmodule NxControl.FrequencyResp do
     mag_list = Enum.reverse(mag_list)
     phase_list = Enum.reverse(phase_list)
 
-    # 增益裕度：相角 = -180° 处的增益
+    # gain margin: magnitude at the phase crossover (-180°)
     gm_entry =
       Enum.zip(freqs, phase_list)
       |> Enum.zip(mag_list)
@@ -164,7 +166,7 @@ defmodule NxControl.FrequencyResp do
         {:infinity, nil}
       end
 
-    # 相角裕度：增益 = 0 dB (magnitude = 1) 处的相位差
+    # phase margin: phase offset at the 0 dB (magnitude = 1) gain crossover
     pm_entry =
       Enum.zip(freqs, mag_list)
       |> Enum.zip(phase_list)
