@@ -9,6 +9,7 @@ defmodule NxControl.Vision.Report do
 
   @enforce_keys [:shape, :colors, :hues, :grid, :edges, :svd, :texture]
   defstruct shape: nil,
+            region: nil,
             colors: nil,
             hues: [],
             grid: nil,
@@ -18,6 +19,8 @@ defmodule NxControl.Vision.Report do
 
   @type t :: %__MODULE__{
           shape: {non_neg_integer(), non_neg_integer()},
+          region:
+            {non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()} | nil,
           colors: %{
             r: map(),
             g: map(),
