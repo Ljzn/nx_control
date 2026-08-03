@@ -8,7 +8,7 @@ defmodule NxControl.Vision do
   value spectrum and a per-cell texture map). The report is intentionally
   plain text so it can be fed directly into an LLM prompt.
 
-  Everything is implemented with pure `Nx` (plus `Nx.Lapack` for the SVD) —
+  Everything is implemented with pure `Nx` (plus `Nx.LinAlg` for the SVD) —
   no external image or machine-learning dependencies.
 
   ## Quick start
@@ -26,6 +26,19 @@ defmodule NxControl.Vision do
       NxControl.Vision.ascii(img)             # color-letter grid (image -> text)
       NxControl.Vision.compress(img, k: 32)   # SVD low-rank reconstruction
       NxControl.Vision.mosaic(img, cells: 12) # block-average "sketch"
+
+  ## Zooming in
+
+  `analyze/2` and `ascii/2` accept a `:region` option so you can look at a
+  part of the image in detail (a classic "global first, then local" workflow):
+
+      global = NxControl.Vision.analyze(img)
+      details = NxControl.Vision.analyze(img, region: {60, 200, 110, 250})
+      for q <- NxControl.Vision.quadrants(img), do: IO.puts(NxControl.Vision.to_text(q))
+
+  See `analyze/2` for all options (`:region`, `:detail`, `:cells`, ...),
+  `sample/3` for a precise color probe, `mask/2` for a binary structure map,
+  and `ascii/2` for `mode: :luma` luminance rendering.
 
   ## Image I/O
 
@@ -141,6 +154,19 @@ defmodule NxControl.Vision do
 
       report = NxControl.Vision.analyze("cat.bmp")
       IO.puts(NxControl.Vision.to_text(report))
+
+  ## Options
+
+    * `:region` — `{y0, y1, x0, x1}` pixel bounds to analyze instead of the
+      whole image. Use it to zoom into a part of the image; the report's
+      `:region` field echoes the (clamped) bounds and `:shape` reflects the
+      region. Bounds are clamped to the image and swapped if inverted.
+    * `:detail` — `:coarse` (largest side ≤ 64), `:fine` (≤ 128) or
+      `:native` (no downsampling). An explicit `:max_size` wins over it.
+    * `:max_size` — largest dimension of the analysis copy (default `64`).
+    * `:cells` — grid resolution used for the color grid, edges and texture
+      (default `12`).
+    * `:top` — how many dominant hue categories `:hues` reports (default `5`).
   """
   def analyze(image, opts \\ [])
 
@@ -150,22 +176,35 @@ defmodule NxControl.Vision do
 
   def analyze(%Nx.Tensor{} = image, opts) do
     cells = opts[:cells] || 12
-    max_size = opts[:max_size] || 64
+    max_size = opts[:max_size] || detail_max_size(opts[:detail]) || 64
 
     rgb = ensure_rgb(image)
     {h, w, 3} = Nx.shape(rgb)
-    work = maybe_resize(Nx.as_type(rgb, :f64), max_size)
+    region = clamp_region(opts[:region], h, w)
+
+    work =
+      rgb
+      |> slice_region(region)
+      |> Nx.as_type(:f64)
+      |> maybe_resize(max_size)
 
     colors = color_stats(work)
-    hues = hue_histogram(work)
+    hues = hue_histogram(work, opts[:top] || 5)
     grid = grid(work, cells)
     gray = luminance(work)
     edges = edge_analysis(gray, cells)
     svd = svd_spectrum(gray)
     texture = texture_analysis(gray, opts[:texture_patch] || 8)
 
+    {rh, rw} =
+      case region do
+        {y0, y1, x0, x1} -> {y1 - y0, x1 - x0}
+        nil -> {h, w}
+      end
+
     %Report{
-      shape: {h, w},
+      shape: {rh, rw},
+      region: region,
       colors: colors,
       hues: hues,
       grid: grid,
@@ -175,7 +214,57 @@ defmodule NxControl.Vision do
     }
   end
 
-  defp ensure_rgb(%{shape: {h, w, 3}} = t), do: t
+  defp detail_max_size(:fine), do: 128
+  defp detail_max_size(:native), do: :erlang.bsl(1, 60)
+  defp detail_max_size(_), do: nil
+
+  defp clamp_region(nil, _h, _w), do: nil
+
+  defp clamp_region({y0, y1, x0, x1}, h, w) do
+    {y0, y1} = bounds(y0, y1, h)
+    {x0, x1} = bounds(x0, x1, w)
+    {y0, y1, x0, x1}
+  end
+
+  defp bounds(a, b, max) do
+    {a, b} = if a <= b, do: {a, b}, else: {b, a}
+    {max(0, a), min(max, max(1, b))}
+  end
+
+  defp slice_region(rgb, nil), do: rgb
+
+  defp slice_region(rgb, {y0, y1, x0, x1}) do
+    Nx.slice(rgb, [y0, x0, 0], [y1 - y0, x1 - x0, 3])
+  end
+
+  @doc """
+  Analyzes an evenly split `:grid` × `:grid` set of sub-regions and returns
+  the reports in row-major order (default `grid: 2`, i.e. four quadrants).
+
+  Each report carries its own `:region`, so this is the "global first, then
+  zoom into each quadrant" workflow in one call. All other `analyze/2`
+  options (except `:region`, which is overridden) apply to every sub-region.
+
+  ## Example
+
+      for q <- NxControl.Vision.quadrants(img, grid: 2) do
+        IO.puts(NxControl.Vision.to_text(q))
+      end
+  """
+  def quadrants(image, opts \\ []) do
+    grid = opts[:grid] || 2
+    rgb = if is_binary(image), do: read_bmp(image), else: ensure_rgb(image)
+    {h, w, 3} = Nx.shape(rgb)
+
+    for gy <- 0..(grid - 1), gx <- 0..(grid - 1) do
+      region =
+        {div(h * gy, grid), div(h * (gy + 1), grid), div(w * gx, grid), div(w * (gx + 1), grid)}
+
+      analyze(image, Keyword.put(opts, :region, region))
+    end
+  end
+
+  defp ensure_rgb(%{shape: {_h, _w, 3}} = t), do: t
 
   defp ensure_rgb(%{shape: {h, w, 1}} = t) do
     Nx.broadcast(t, {h, w, 3})
@@ -261,9 +350,10 @@ defmodule NxControl.Vision do
     %{r: stats.(r), g: stats.(g), b: stats.(b), luminance: Nx.to_number(Nx.mean(luminance(rgb)))}
   end
 
-  # RGB -> hue histogram with gray/black/white buckets. Returns the top-3
+  # RGB -> dominant tone histogram with black/white/neutral/warm/cool/pale
+  # buckets and the 12-color wheel for saturated pixels. Returns the top-N
   # categories as `[{name, fraction}]`.
-  defp hue_histogram(rgb) do
+  defp hue_histogram(rgb, top) do
     flat = Nx.to_flat_list(Nx.as_type(rgb, :f64))
     n = div(length(flat), 3)
 
@@ -276,13 +366,20 @@ defmodule NxControl.Vision do
     counts
     |> Enum.map(fn {key, cnt} -> {key, cnt / n} end)
     |> Enum.sort_by(fn {_, f} -> -f end)
-    |> Enum.take(3)
+    |> Enum.take(top)
   end
 
+  # Saturation-aware tone key:
+  #   - very dark / very bright pixels are "black" / "white"
+  #   - low-saturation pixels are "neutral" (pure gray)
+  #   - mid-saturation pixels collapse to a coarse tint ("warm"/"cool"/"pale")
+  #     so a sepia photo reports "warm" instead of a misleading "red"/"orange"
+  #   - only saturated pixels get the full 12-color wheel
   defp hue_key(r, g, b) do
     mx = max(max(r, g), b)
     mn = min(min(r, g), b)
     delta = mx - mn
+    sat = if mx > 0, do: delta / mx, else: 0.0
 
     cond do
       mx < 45 ->
@@ -291,11 +388,11 @@ defmodule NxControl.Vision do
       mn > 210 ->
         "white"
 
-      delta / mx < 0.15 ->
-        "gray"
+      sat < 0.15 ->
+        "neutral"
 
-      mx > 215 and delta / mx < 0.3 ->
-        "pale"
+      sat < 0.5 ->
+        tint_key(r, g, b, mx)
 
       true ->
         hue =
@@ -305,8 +402,22 @@ defmodule NxControl.Vision do
             true -> 60 * ((r - g) / delta + 4)
           end
 
-        bin = rem(trunc(hue / 30), 12)
+        bin = Integer.mod(trunc(hue / 30), 12)
         Enum.find(@hue_names, fn {_, b} -> b == bin end) |> elem(0)
+    end
+  end
+
+  # Coarse tint for mid-saturation (pastel/sepia-like) tones: "pale" when
+  # bright, otherwise "warm"/"cool" by the dominant channel.
+  defp tint_key(r, g, b, mx) do
+    if mx > 200 do
+      "pale"
+    else
+      cond do
+        mx == r -> "warm"
+        mx == b -> "cool"
+        mx == g -> if r >= b, do: "warm", else: "cool"
+      end
     end
   end
 
@@ -379,7 +490,7 @@ defmodule NxControl.Vision do
   # Singular value spectrum of the grayscale image.
   defp svd_spectrum(gray) do
     {h, w} = Nx.shape(gray)
-    {nil, s, nil} = Nx.Lapack.svd(gray, vectors: :none)
+    {_u, s, _v} = Nx.LinAlg.svd(gray, full_matrices?: false)
     values = Nx.to_flat_list(s)
     energy = Enum.map(values, &(&1 * &1))
     total = Enum.sum(energy)
@@ -402,6 +513,10 @@ defmodule NxControl.Vision do
 
   # Per-cell texture: first-singular-value share lambda_1 / sum(lambda) of
   # each patch. Flat cells -> near 1.0; detailed cells -> lower.
+  #
+  # All patches are analysed in ONE batched SVD (stacked as {n_patches, ph, pw})
+  # instead of one jit call per patch — that keeps native-resolution analysis
+  # fast (a 360px image would otherwise run 2000+ separate executables).
   defp texture_analysis(gray, patch) do
     {h, w} = Nx.shape(gray)
     ph = min(patch, h)
@@ -409,15 +524,18 @@ defmodule NxControl.Vision do
     nh = div(h, ph)
     nw = div(w, pw)
 
-    flatness =
-      for cy <- 0..(nh - 1), cx <- 0..(nw - 1) do
-        p = Nx.slice(gray, [cy * ph, cx * pw], [ph, pw])
-        {nil, s, nil} = Nx.Lapack.svd(p, vectors: :none)
-        sv = Nx.to_flat_list(s)
-        first = hd(sv)
-        sum = Enum.sum(sv)
-        if sum > 0, do: first / sum, else: 1.0
-      end
+    patches =
+      gray
+      |> Nx.slice([0, 0], [nh * ph, nw * pw])
+      |> Nx.reshape({nh, ph, nw, pw})
+      |> Nx.transpose(axes: [0, 2, 1, 3])
+      |> Nx.reshape({nh * nw, ph, pw})
+
+    {_u, s, _v} = Nx.LinAlg.svd(patches, full_matrices?: false)
+    first = s[[0..(nh * nw - 1), 0]]
+    sum = Nx.sum(s, axes: [1])
+    flatness = Nx.divide(first, Nx.max(sum, Nx.tensor(1.0e-12, type: :f64)))
+    flatness = Nx.to_flat_list(flatness)
 
     # A cell is "detailed" if the leading singular value carries less than
     # 80% of the patch energy.
@@ -490,9 +608,15 @@ defmodule NxControl.Vision do
       end)
       |> Enum.join("\n")
 
+    region_line =
+      case r.region do
+        {y0, y1, x0, x1} -> "REGION y=#{y0}-#{y1} x=#{x0}-#{x1}\n"
+        nil -> ""
+      end
+
     """
     IMAGE #{w}x#{h}
-    COLOR  #{color_line}
+    #{region_line}COLOR  #{color_line}
     HUES   #{hues_line}
     GRID #{gw}x#{gh}
     #{grid_text}
@@ -505,25 +629,62 @@ defmodule NxControl.Vision do
   defp fmt(x), do: Float.round(x, 1) |> Float.to_string()
 
   @doc """
-  Prints an image as a coarse grid of color letters (image -> text).
+  Prints an image as a coarse grid of characters (image -> text).
 
-  Each cell is averaged and mapped to a single character:
-  `K` black `W` white `R` red `O` orange `Y` yellow `G` green `C` cyan
-  `B` blue `M` magenta `n` brown `c` cream `p` pink `g` gray `.` other.
+  With `mode: :hue` (default) each cell is averaged and mapped to a color
+  letter: `K` black `W` white `R` red `O` orange `Y` yellow `G` green
+  `C` cyan `B` blue `M` magenta `n` brown `c` cream `p` pink `w` warm gray
+  `g` gray `.` other.
 
-  Returns the multi-line string.
+  With `mode: :luma` each cell is mapped to a graded luminance character
+  (` ` darkest .. `&` brightest, 14 levels) which reveals shapes and shading
+  better than the color letters on desaturated images.
+
+  Accepts all `analyze/2` options (`:region`, `:detail`, `:max_size`,
+  `:cells`, ...). Returns the multi-line string.
+
+  ## Example
+
+      IO.puts(NxControl.Vision.ascii(img, region: {60, 200, 110, 250}, mode: :luma))
   """
   def ascii(image, opts \\ []) do
     cells = opts[:cells] || 16
-    img = analyze(image, cells: cells, max_size: opts[:max_size] || 128)
-    {gh, gw, _} = Nx.shape(img.grid)
+    mode = opts[:mode] || :hue
+
+    # An explicit :detail must not be shadowed by ascii's default 128 max_size.
+    max_size = if opts[:detail], do: opts[:max_size], else: opts[:max_size] || 128
+
+    img =
+      analyze(image,
+        cells: cells,
+        max_size: max_size,
+        detail: opts[:detail],
+        region: opts[:region]
+      )
+
+    {_gh, gw, _} = Nx.shape(img.grid)
 
     img.grid
     |> Nx.to_flat_list()
     |> Enum.chunk_every(3)
     |> Enum.chunk_every(gw)
-    |> Enum.map(fn row -> Enum.map_join(row, "", fn [r, g, b] -> color_letter(r, g, b) end) end)
+    |> Enum.map(fn row -> Enum.map_join(row, "", &cell_letter(&1, mode)) end)
     |> Enum.join("\n")
+  end
+
+  defp cell_letter([r, g, b], :luma) do
+    luma_letter(0.299 * r + 0.587 * g + 0.114 * b)
+  end
+
+  defp cell_letter([r, g, b], :hue), do: color_letter(r, g, b)
+
+  # 14-level graded luminance, darkest to brightest.
+  @luma_chars " .`',:;=+*#%@&"
+
+  defp luma_letter(l) do
+    i = trunc(l / 256 * byte_size(@luma_chars))
+    i = max(0, min(byte_size(@luma_chars) - 1, i))
+    binary_part(@luma_chars, i, 1)
   end
 
   defp color_letter(r, g, b) do
@@ -540,9 +701,82 @@ defmodule NxControl.Vision do
       r > 150 and g < 110 and b > 150 -> "M"
       r >= 100 and r < 190 and g >= 60 and g < 135 and b < 95 -> "n"
       r > 205 and g >= 165 and g <= 220 and b >= 130 and b <= 200 -> "c"
+      warm_midgray?(r, g, b) -> "w"
       r > 130 and r < 215 and g > 130 and g < 215 and b > 130 and b < 215 -> "g"
       true -> "."
     end
+  end
+
+  defp warm_midgray?(r, g, b) do
+    r > 130 and r < 215 and g > 130 and g < 215 and b > 130 and b < 215 and r >= b + 12 and
+      g >= b + 6
+  end
+
+  @doc """
+  Returns the mean `{r, g, b}` of the square patch centered at pixel
+  `(y, x)` with the given `:radius` (default `1`, i.e. a 3×3 patch). Bounds
+  are clamped to the image. This is a precise color probe for small features
+  like a nose, an eye or a highlight.
+
+  ## Example
+
+      {r, g, b} = NxControl.Vision.sample(img, 162, 182)
+  """
+  def sample(image, y, x, opts \\ []) do
+    radius = opts[:radius] || 1
+    rgb = ensure_rgb(Nx.as_type(image, :f64))
+    {h, w, 3} = Nx.shape(rgb)
+    y0 = max(0, y - radius)
+    y1 = min(h, y + radius + 1)
+    x0 = max(0, x - radius)
+    x1 = min(w, x + radius + 1)
+
+    patch = Nx.slice(rgb, [y0, x0, 0], [y1 - y0, x1 - x0, 3])
+    {r, g, b} = split_channels(patch)
+    {Nx.to_number(Nx.mean(r)), Nx.to_number(Nx.mean(g)), Nx.to_number(Nx.mean(b))}
+  end
+
+  @doc """
+  Returns a binary `{H, W}` tensor (`:u8`, `1`/`0`) marking pixels whose
+  luminance is at least `:threshold` (default `128`). This is a pixel-level
+  structure map — use it to outline bright regions or silhouettes.
+
+  `mask_ascii/2` renders the same mask as `#`/`.` text lines.
+
+  ## Example
+
+      mask = NxControl.Vision.mask(img, threshold: 200)
+      IO.puts(NxControl.Vision.mask_ascii(img, threshold: 200))
+  """
+  def mask(image, opts \\ []) do
+    threshold = opts[:threshold] || 128
+    gray = luminance(ensure_rgb(Nx.as_type(image, :f64)))
+    Nx.greater_equal(gray, Nx.tensor(threshold * 1.0, type: :f64)) |> Nx.as_type(:u8)
+  end
+
+  @doc """
+  Renders `mask/2` as text: `#` where the luminance is at or above the
+  `:threshold`, `.` elsewhere. `:rows`/`:cols` optionally downsample the
+  render (each cell covers a block).
+  """
+  def mask_ascii(image, opts \\ []) do
+    m = mask(image, opts)
+    {h, w} = Nx.shape(m)
+    rows = opts[:rows] || h
+    cols = opts[:cols] || w
+    step_h = max(1, div(h + rows - 1, rows))
+    step_w = max(1, div(w + cols - 1, cols))
+    nh = div(h, step_h)
+    nw = div(w, step_w)
+
+    m
+    |> Nx.slice([0, 0], [nh * step_h, nw * step_w])
+    |> Nx.reshape({nh, step_h, nw, step_w})
+    |> Nx.mean(axes: [1, 3])
+    |> Nx.to_flat_list()
+    |> Enum.chunk_every(nw)
+    |> Enum.map(fn row -> Enum.map_join(row, &if(&1 >= 0.5, do: "#", else: ".")) end)
+    |> Enum.join("\n")
   end
 
   # ─────────────────────────────────────────────
@@ -565,12 +799,13 @@ defmodule NxControl.Vision do
     channels =
       Enum.map(0..2, fn c ->
         ch = Nx.slice(rgb, [0, 0, c], [h, w, 1]) |> Nx.reshape({h, w})
-        {u, s, vt} = Nx.Lapack.svd(ch)
+        # Nx.LinAlg.svd returns {u, s, v} with a = u·diag(s)·v (economy).
+        {u, s, v} = Nx.LinAlg.svd(ch, full_matrices?: false)
         n = Nx.size(s)
         kk = min(k, n)
-        uk = Nx.slice(u, [0, 0], [n, kk])
+        uk = Nx.slice(u, [0, 0], [h, kk])
         sk = Nx.slice(s, [0], [kk])
-        vk = Nx.slice(vt, [0, 0], [kk, n])
+        vk = Nx.slice(v, [0, 0], [kk, w])
         sm = Nx.multiply(Nx.eye(kk, type: :f64), Nx.reshape(sk, {kk, 1}))
         Nx.dot(Nx.dot(uk, sm), vk)
       end)
