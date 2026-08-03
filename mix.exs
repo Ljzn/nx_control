@@ -22,7 +22,8 @@ defmodule NxControl.MixProject do
   defp deps do
     [
       {:nx, "~> 0.13"},
-      {:nx_lapack, path: "../nx_lapack"}
+      {:nx_lapack, path: "../nx_lapack"},
+      {:exla, "~> 0.13"}
     ]
   end
 end

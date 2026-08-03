@@ -4,8 +4,8 @@ defmodule NxControl.TransferFunctionTest do
   describe "new/2" do
     test "creates a transfer function from lists" do
       tf = NxControl.TransferFunction.new([1], [1, 2, 1])
-      assert tf.num == Nx.tensor([1.0], type: :f64)
-      assert tf.den == Nx.tensor([1.0, 2.0, 1.0], type: :f64)
+      assert Nx.to_flat_list(tf.num) == [1.0]
+      assert Nx.to_flat_list(tf.den) == [1.0, 2.0, 1.0]
     end
   end
 
